@@ -120,15 +120,17 @@ func serviceTemplate(deps *map[string]string, name string, runCmd []string, appE
 	unsafe(t.Execute(f, data))
 }
 
-func proxyTemplate(host string, port int) {
+func proxyTemplate(host string, upstreamHost string, upstreamPort int) {
 	t := unsafeGet(template.ParseFS(templates, "templates/nginx.template"))
 
 	data := struct {
-		Host string
-		Port int
+		Host         string
+		UpstreamPort int
+		UpstreamHost string
 	}{
-		Host: host,
-		Port: port,
+		Host:         host,
+		UpstreamPort: upstreamPort,
+		UpstreamHost: upstreamHost,
 	}
 
 	logsDir := fmt.Sprintf("/var/log/%s", host)
@@ -174,7 +176,8 @@ func install(
 	src string,
 	name string,
 	host string,
-	port int) {
+	upstreamHost string,
+	upstreamPort int) {
 	uid, gid := ensureUser(name)
 
 	targetDir := filepath.Join("/home", name, fmt.Sprintf("%s-%s-%s", s.Owner, s.Repo, r.Tag))
@@ -211,7 +214,7 @@ func install(
 	chown(targetDir, name)
 	serviceTemplate(deps, name, conf.Run, appEnv, targetDir, uid, gid)
 	if host != "" {
-		proxyTemplate(host, port)
+		proxyTemplate(host, upstreamHost, upstreamPort)
 	}
 }
 
@@ -309,7 +312,7 @@ func validateAssets(release *Release, assetName string) {
 	}
 }
 
-func installCmd(s *Service, appEnv []string, name string, host string, port int, assetName string) {
+func installCmd(s *Service, appEnv []string, name string, host string, upstreamHost string, upstreamPort int, assetName string) {
 	fmt.Printf("Installing %s\n", s.String())
 
 	cfg := loadInstllrConfig()
@@ -346,7 +349,7 @@ func installCmd(s *Service, appEnv []string, name string, host string, port int,
 		cmd.Run()
 	}
 
-	install(s, release, appCfg, deps, appEnv, dir, name, host, port)
+	install(s, release, appCfg, deps, appEnv, dir, name, host, upstreamHost, upstreamPort)
 	for _, w := range appCfg.Workers {
 		installWorker(s, release, deps, appEnv, name, &w)
 	}
@@ -409,7 +412,8 @@ func uninstallCmd(name string, host string) {
 func main() {
 	var host string
 	var name string
-	var port int
+	var upstreamHost string
+	var upstreamPort int
 	var appEnv cli.StringSlice
 	var appEnvFile string
 	var assetName string
@@ -440,11 +444,17 @@ func main() {
 				Required:    false,
 				Destination: &name,
 			},
+			&cli.StringFlag{
+				Name:        "upstream-host",
+				Usage:       "upstream host (default: 127.0.0.1)",
+				Required:    false,
+				Destination: &upstreamHost,
+			},
 			&cli.IntFlag{
 				Name:        "port",
-				Usage:       "local application port",
+				Usage:       "upstream port",
 				Required:    false,
-				Destination: &port,
+				Destination: &upstreamPort,
 			},
 			&cli.StringFlag{
 				Name:        "asset-name",
@@ -461,11 +471,14 @@ func main() {
 			}
 
 			if c == Install {
-				if port == 0 {
-					log.Fatalf("invalid port: %d\n", port)
+				if upstreamPort == 0 {
+					log.Fatalf("invalid upstream port: %d\n", upstreamPort)
 				}
 				if host == "" && name == "" {
 					log.Fatal("both host and name are empty")
+				}
+				if upstreamHost == "" {
+					upstreamHost = "127.0.0.1"
 				}
 
 				env := appEnv.Value()
@@ -483,7 +496,7 @@ func main() {
 					}
 				}
 
-				installCmd(s, env, serviceName, host, port, assetName)
+				installCmd(s, env, serviceName, host, upstreamHost, upstreamPort, assetName)
 			} else if c == Uninstall {
 				uninstallCmd(serviceName, host)
 			}
