@@ -120,17 +120,19 @@ func serviceTemplate(deps *map[string]string, name string, runCmd []string, appE
 	unsafe(t.Execute(f, data))
 }
 
-func proxyTemplate(host string, upstreamHost string, upstreamPort int) {
+func proxyTemplate(host string, upstreamHost string, upstreamPort int, ws bool) {
 	t := unsafeGet(template.ParseFS(templates, "templates/nginx.template"))
 
 	data := struct {
 		Host         string
 		UpstreamPort int
 		UpstreamHost string
+		WS           bool
 	}{
 		Host:         host,
 		UpstreamPort: upstreamPort,
 		UpstreamHost: upstreamHost,
+		WS:           ws,
 	}
 
 	logsDir := fmt.Sprintf("/var/log/%s", host)
@@ -177,7 +179,8 @@ func install(
 	name string,
 	host string,
 	upstreamHost string,
-	upstreamPort int) {
+	upstreamPort int,
+	ws bool) {
 	uid, gid := ensureUser(name)
 
 	targetDir := filepath.Join("/home", name, fmt.Sprintf("%s-%s-%s", s.Owner, s.Repo, r.Tag))
@@ -214,7 +217,7 @@ func install(
 	chown(targetDir, name)
 	serviceTemplate(deps, name, conf.Run, appEnv, targetDir, uid, gid)
 	if host != "" {
-		proxyTemplate(host, upstreamHost, upstreamPort)
+		proxyTemplate(host, upstreamHost, upstreamPort, ws)
 	}
 }
 
@@ -312,7 +315,7 @@ func validateAssets(release *Release, assetName string) {
 	}
 }
 
-func installCmd(s *Service, appEnv []string, name string, host string, upstreamHost string, upstreamPort int, assetName string) {
+func installCmd(s *Service, appEnv []string, name string, host string, upstreamHost string, upstreamPort int, assetName string, ws bool) {
 	fmt.Printf("Installing %s\n", s.String())
 
 	cfg := loadInstllrConfig()
@@ -349,7 +352,7 @@ func installCmd(s *Service, appEnv []string, name string, host string, upstreamH
 		cmd.Run()
 	}
 
-	install(s, release, appCfg, deps, appEnv, dir, name, host, upstreamHost, upstreamPort)
+	install(s, release, appCfg, deps, appEnv, dir, name, host, upstreamHost, upstreamPort, ws)
 	for _, w := range appCfg.Workers {
 		installWorker(s, release, deps, appEnv, name, &w)
 	}
@@ -417,6 +420,7 @@ func main() {
 	var appEnv cli.StringSlice
 	var appEnvFile string
 	var assetName string
+	var ws bool
 
 	app := &cli.App{
 		Name:  "instllr",
@@ -462,6 +466,12 @@ func main() {
 				Required:    false,
 				Destination: &assetName,
 			},
+			&cli.BoolFlag{
+				Name:        "ws",
+				Usage:       "Enable WebSocket support in Nginx",
+				Required:    false,
+				Destination: &ws,
+			},
 		},
 		Action: func(ctx *cli.Context) error {
 			c, s := parseArgs(ctx.Args())
@@ -496,7 +506,7 @@ func main() {
 					}
 				}
 
-				installCmd(s, env, serviceName, host, upstreamHost, upstreamPort, assetName)
+				installCmd(s, env, serviceName, host, upstreamHost, upstreamPort, assetName, ws)
 			} else if c == Uninstall {
 				uninstallCmd(serviceName, host)
 			}
