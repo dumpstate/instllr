@@ -315,7 +315,7 @@ func validateAssets(release *Release, assetName string) {
 	}
 }
 
-func installCmd(s *Service, appEnv []string, name string, host string, upstreamHost string, upstreamPort int, assetName string, ws bool) {
+func installCmd(s *Service, appEnv []string, name string, host string, upstreamHost string, upstreamPort int, assetName string, ws bool, tmpDirBase string) {
 	fmt.Printf("Installing %s\n", s.String())
 
 	cfg := loadInstllrConfig()
@@ -327,7 +327,7 @@ func installCmd(s *Service, appEnv []string, name string, host string, upstreamH
 		log.Fatalf("Version %s already installed\n", currVer)
 	}
 
-	dir := tmpDir()
+	dir := tmpDir(tmpDirBase)
 	defer os.RemoveAll(dir)
 
 	assetpath := fetchReleaseAsset(cfg, release.GetAsset(assetName), dir)
@@ -421,6 +421,7 @@ func main() {
 	var appEnvFile string
 	var assetName string
 	var ws bool
+	var tmpDirBase string
 
 	app := &cli.App{
 		Name:  "instllr",
@@ -472,6 +473,12 @@ func main() {
 				Required:    false,
 				Destination: &ws,
 			},
+			&cli.StringFlag{
+				Name:        "tmp-dir",
+				Usage:       "Temporary directory for installation",
+				Required:    false,
+				Destination: &tmpDirBase,
+			},
 		},
 		Action: func(ctx *cli.Context) error {
 			c, s := parseArgs(ctx.Args())
@@ -506,7 +513,7 @@ func main() {
 					}
 				}
 
-				installCmd(s, env, serviceName, host, upstreamHost, upstreamPort, assetName, ws)
+				installCmd(s, env, serviceName, host, upstreamHost, upstreamPort, assetName, ws, tmpDirBase)
 			} else if c == Uninstall {
 				uninstallCmd(serviceName, host)
 			}

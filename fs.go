@@ -15,8 +15,8 @@ import (
 	"github.com/xi2/xz"
 )
 
-func tmpDir() string {
-	return unsafeGet(ioutil.TempDir("", ""))
+func tmpDir(base string) string {
+	return unsafeGet(ioutil.TempDir(base, ""))
 }
 
 func untar(path string, target string) {
